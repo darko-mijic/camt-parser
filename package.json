@@ -24,7 +24,7 @@
     "parser",
     "typescript"
   ],
-  "author": "",
+  "author": "Darko Mijic",
   "license": "MIT",
   "dependencies": {
     "xml2js": "^0.6.2"
@@ -39,10 +39,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/camt-parser"
+    "url": "https://github.com/darko-mijic/camt-parser.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/camt-parser/issues"
+    "url": "https://github.com/darko-mijic/camt-parser/issues"
   },
-  "homepage": "https://github.com/yourusername/camt-parser#readme"
+  "homepage": "https://github.com/darko-mijic/camt-parser#readme"
 }
