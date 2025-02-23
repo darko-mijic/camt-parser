@@ -11,9 +11,12 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
-    "prepublish": "npm run build",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm test",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "version": "git add -A src",
+    "postversion": "git push && git push --tags"
   },
   "keywords": [
     "camt",
@@ -44,5 +47,11 @@
   "bugs": {
     "url": "https://github.com/darko-mijic/camt-parser/issues"
   },
-  "homepage": "https://github.com/darko-mijic/camt-parser#readme"
+  "homepage": "https://github.com/darko-mijic/camt-parser#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
 }
