@@ -1,7 +1,12 @@
 import { parseStringPromise } from 'xml2js';
-import { Camt053Document, GroupHeader, Statement, Balance, Amount, TransactionSummary, Entry, EntryDetails, TransactionDetails } from './types';
+import {
+  BankStatementDocument, DocumentHeader, BankStatement, BankAccount, AccountOwner,
+  Balance, Amount, TransactionSummary, SummaryDetail, Transaction, TransactionDetail,
+  Party, AccountIdentification
+} from './types';
 
-export async function parseCamt053(xml: string): Promise<Camt053Document> {
+// Parse the CAMT XML into a BankStatementDocument
+export async function parseCamt053(xml: string): Promise<BankStatementDocument> {
   const result = await parseStringPromise(xml, {
     explicitArray: false,
     mergeAttrs: true,
@@ -9,194 +14,216 @@ export async function parseCamt053(xml: string): Promise<Camt053Document> {
 
   const bkToCstmrStmt = result.Document.BkToCstmrStmt;
 
-  const groupHeader = mapGroupHeader(bkToCstmrStmt.GrpHdr);
+  const header = mapDocumentHeader(bkToCstmrStmt.GrpHdr);
   const statements = bkToCstmrStmt.Stmt
     ? Array.isArray(bkToCstmrStmt.Stmt)
       ? bkToCstmrStmt.Stmt.map(mapStatement)
       : [mapStatement(bkToCstmrStmt.Stmt)]
     : [];
 
-  return { groupHeader, statements };
+  return { header, statements };
 }
 
-function mapGroupHeader(grpHdr: any): GroupHeader {
+// Map document header
+function mapDocumentHeader(grpHdr: any): DocumentHeader {
   return {
-    msgId: grpHdr.MsgId,
-    creDtTm: grpHdr.CreDtTm,
+    messageId: grpHdr.MsgId,
+    creationDateTime: grpHdr.CreDtTm,
   };
 }
 
-function mapStatement(stmt: any): Statement {
+// Map individual bank statement
+function mapStatement(stmt: any): BankStatement {
   return {
-    id: stmt.Id,
-    lglSeqNb: stmt.LglSeqNb,
-    creDtTm: stmt.CreDtTm,
-    frToDt: {
-      frDtTm: stmt.FrToDt.FrDtTm,
-      toDtTm: stmt.FrToDt.ToDtTm,
-    },
-    rptgSrc: {
-      prtry: stmt.RptgSrc.Prtry,
-    },
-    acct: {
-      id: {
-        iban: stmt.Acct.Id.IBAN,
-      },
-      ccy: stmt.Acct.Ccy,
-      nm: stmt.Acct.Nm,
-      ownr: {
-        nm: stmt.Acct.Ownr.Nm,
-        pstlAdr: {
-          adrLine: Array.isArray(stmt.Acct.Ownr.PstlAdr.AdrLine)
-            ? stmt.Acct.Ownr.PstlAdr.AdrLine
-            : [stmt.Acct.Ownr.PstlAdr.AdrLine],
-        },
-        id: {
-          orgId: {
-            othr: {
-              id: stmt.Acct.Ownr.Id.OrgId.Othr.Id,
-            },
-          },
-        },
-      },
-    },
-    bal: stmt.Bal ? (Array.isArray(stmt.Bal) ? stmt.Bal.map(mapBalance) : [mapBalance(stmt.Bal)]) : [],
-    txsSummry: stmt.TxsSummry ? mapTransactionSummary(stmt.TxsSummry) : undefined,
-    ntry: stmt.Ntry ? (Array.isArray(stmt.Ntry) ? stmt.Ntry.map(mapEntry) : [mapEntry(stmt.Ntry)]) : [],
-    addtlStmtInf: stmt.AddtlStmtInf,
+    statementId: stmt.Id,                    // Bank statement number
+    sequenceNumber: stmt.LglSeqNb || '',
+    creationDateTime: stmt.CreDtTm || '',
+    fromDateTime: stmt.FrToDt?.FrDtTm || '',
+    toDateTime: stmt.FrToDt?.ToDtTm || '',   // Bank statement date
+    reportingSource: stmt.RptgSrc?.Prtry || '',
+    account: mapBankAccount(stmt.Acct),      // Bank account details
+    balances: stmt.Bal ? (Array.isArray(stmt.Bal) ? stmt.Bal.map(mapBalance) : [mapBalance(stmt.Bal)]) : [],
+    transactionSummary: stmt.TxsSummry ? mapTransactionSummary(stmt.TxsSummry) : undefined,
+    transactions: stmt.Ntry ? (Array.isArray(stmt.Ntry) ? stmt.Ntry.map(mapTransaction) : [mapTransaction(stmt.Ntry)]) : [],
+    additionalInfo: stmt.AddtlStmtInf,
   };
 }
 
+// Map bank account details
+function mapBankAccount(acct: any): BankAccount {
+  if (!acct) {
+    throw new Error('Missing account information');
+  }
+  
+  return {
+    iban: acct.Id?.IBAN || '',               // IBAN
+    currency: acct.Ccy || '',
+    name: acct.Nm || '',
+    owner: mapAccountOwner(acct.Ownr),
+  };
+}
+
+// Map account owner
+function mapAccountOwner(ownr: any): AccountOwner {
+  if (!ownr) {
+    return {
+      name: '',
+      address: [],
+      id: '',
+    };
+  }
+  
+  return {
+    name: ownr.Nm || '',
+    address: ownr.PstlAdr?.AdrLine 
+      ? (Array.isArray(ownr.PstlAdr.AdrLine) 
+          ? ownr.PstlAdr.AdrLine 
+          : [ownr.PstlAdr.AdrLine])
+      : [],
+    id: ownr.Id?.OrgId?.Othr?.Id || '',
+  };
+}
+
+// Map balance (e.g., opening or closing)
 function mapBalance(bal: any): Balance {
-  if (!bal || !bal.Tp || !bal.Tp.CdOrPrtry || !bal.Tp.CdOrPrtry.Cd) {
+  if (!bal) {
     throw new Error('Invalid balance data: missing required fields');
   }
   
   return {
-    tp: {
-      cdOrPrtry: {
-        cd: bal.Tp.CdOrPrtry.Cd,
-      },
-    },
-    amt: mapAmount(bal.Amt),
-    cdtDbtInd: bal.CdtDbtInd,
-    dt: {
-      dt: bal.Dt.Dt,
-    },
+    type: bal.Tp?.CdOrPrtry?.Cd || '',       // "OPBD" or "CLBD"
+    amount: mapAmount(bal.Amt),
+    creditDebitIndicator: bal.CdtDbtInd || '',
+    date: bal.Dt?.Dt || bal.Dt?.DtTm || '',  // Handle both date formats
   };
 }
 
+// Map amount
 function mapAmount(amt: any): Amount {
-  if (!amt || !amt.Ccy || !amt._) {
-    throw new Error('Invalid amount data: missing required fields');
+  if (!amt) {
+    return {
+      currency: '',
+      value: '',
+    };
   }
   
   return {
-    currency: amt.Ccy,
-    value: amt._,
+    currency: amt.Ccy || '',
+    value: amt._ || '',
   };
 }
 
+// Map transaction summary
 function mapTransactionSummary(txsSummry: any): TransactionSummary {
+  if (!txsSummry) {
+    return {
+      totalCreditEntries: undefined,
+      totalDebitEntries: undefined,
+    };
+  }
+  
   return {
-    ttlCdtNtries: txsSummry.TtlCdtNtries ? {
-      nbOfNtries: txsSummry.TtlCdtNtries.NbOfNtries,
-      sum: txsSummry.TtlCdtNtries.Sum,
+    totalCreditEntries: txsSummry.TtlCdtNtries ? {
+      numberOfEntries: txsSummry.TtlCdtNtries.NbOfNtries || '',
+      sum: txsSummry.TtlCdtNtries.Sum || '',
     } : undefined,
-    ttlDbtNtries: txsSummry.TtlDbtNtries ? {
-      nbOfNtries: txsSummry.TtlDbtNtries.NbOfNtries,
-      sum: txsSummry.TtlDbtNtries.Sum,
+    totalDebitEntries: txsSummry.TtlDbtNtries ? {
+      numberOfEntries: txsSummry.TtlDbtNtries.NbOfNtries || '',
+      sum: txsSummry.TtlDbtNtries.Sum || '',
     } : undefined,
   };
 }
 
-function mapEntry(ntry: any): Entry {
-  if (!ntry || !ntry.Amt || !ntry.CdtDbtInd || !ntry.Sts || !ntry.Sts.Cd) {
-    throw new Error('Invalid entry data: missing required fields');
+// Map individual transaction
+function mapTransaction(ntry: any): Transaction {
+  if (!ntry) {
+    throw new Error('Invalid transaction data: missing required fields');
   }
 
   return {
-    ntryRef: ntry.NtryRef,
-    amt: mapAmount(ntry.Amt),
-    cdtDbtInd: ntry.CdtDbtInd,
-    rvslInd: ntry.RvslInd === 'true',
-    sts: {
-      cd: ntry.Sts.Cd,
-    },
-    bookgDt: {
-      dt: ntry.BookgDt.Dt,
-    },
-    valDt: {
-      dt: ntry.ValDt.Dt,
-    },
-    acctSvcrRef: ntry.AcctSvcrRef,
-    bkTxCd: {
-      prtry: {
-        cd: ntry.BkTxCd.Prtry.Cd,
-      },
-    },
-    ntryDtls: Array.isArray(ntry.NtryDtls) ? ntry.NtryDtls.map(mapEntryDetails) : [mapEntryDetails(ntry.NtryDtls)],
+    reference: ntry.NtryRef,
+    amount: mapAmount(ntry.Amt),
+    creditDebitIndicator: ntry.CdtDbtInd || '',
+    reversalIndicator: ntry.RvslInd === 'true',
+    status: ntry.Sts?.Cd || '',
+    bookingDate: ntry.BookgDt?.DtTm || ntry.BookgDt?.Dt || '',
+    valueDate: ntry.ValDt?.DtTm || ntry.ValDt?.Dt || '',
+    accountServicerReference: ntry.AcctSvcrRef || '',
+    bankTransactionCode: ntry.BkTxCd?.Prtry?.Cd || '',
+    details: mapTransactionDetails(ntry.NtryDtls),
   };
 }
 
-function mapEntryDetails(ntryDtls: any): EntryDetails {
-  if (!ntryDtls || !ntryDtls.TxDtls) {
-    throw new Error('Invalid entry details: missing required fields');
+// Map transaction details array
+function mapTransactionDetails(ntryDtls: any): TransactionDetail[] {
+  if (!ntryDtls) {
+    return [];
   }
-
-  return {
-    txDtls: Array.isArray(ntryDtls.TxDtls) ? ntryDtls.TxDtls.map(mapTransactionDetails) : [mapTransactionDetails(ntryDtls.TxDtls)],
-  };
+  
+  if (Array.isArray(ntryDtls)) {
+    return ntryDtls.flatMap((dtls: any) => 
+      Array.isArray(dtls.TxDtls) 
+        ? dtls.TxDtls.map(mapTransactionDetail) 
+        : [mapTransactionDetail(dtls.TxDtls)]
+    );
+  }
+  
+  return Array.isArray(ntryDtls.TxDtls)
+    ? ntryDtls.TxDtls.map(mapTransactionDetail)
+    : [mapTransactionDetail(ntryDtls.TxDtls)];
 }
 
-function mapTransactionDetails(txDtls: any): TransactionDetails {
-  if (!txDtls || !txDtls.Refs || !txDtls.AmtDtls || !txDtls.AmtDtls.TxAmt) {
-    throw new Error('Invalid transaction details: missing required fields');
+// Map transaction detail
+function mapTransactionDetail(txDtls: any): TransactionDetail {
+  if (!txDtls) {
+    return {
+      references: {
+        accountServicerReference: '',
+        endToEndId: '',
+      },
+      amountDetails: {
+        transactionAmount: { currency: '', value: '' },
+      },
+    };
   }
 
   return {
-    refs: {
-      acctSvcrRef: txDtls.Refs.AcctSvcrRef,
-      endToEndId: txDtls.Refs.EndToEndId,
+    references: {
+      accountServicerReference: txDtls.Refs?.AcctSvcrRef || '',
+      endToEndId: txDtls.Refs?.EndToEndId || '',
     },
-    amtDtls: {
-      txAmt: {
-        amt: mapAmount(txDtls.AmtDtls.TxAmt.Amt),
-      },
+    amountDetails: {
+      transactionAmount: txDtls.AmtDtls?.TxAmt?.Amt 
+        ? mapAmount(txDtls.AmtDtls.TxAmt.Amt)
+        : { currency: '', value: '' },
     },
-    rltdPties: txDtls.RltdPties ? {
-      ultmtDbtr: txDtls.RltdPties.UltmtDbtr ? { pty: txDtls.RltdPties.UltmtDbtr.Pty } : undefined,
-      cdtr: txDtls.RltdPties.Cdtr ? {
-        pty: {
-          nm: txDtls.RltdPties.Cdtr.Pty.Nm,
-          pstlAdr: {
-            ctry: txDtls.RltdPties.Cdtr.Pty.PstlAdr.Ctry,
-            adrLine: Array.isArray(txDtls.RltdPties.Cdtr.Pty.PstlAdr.AdrLine)
-              ? txDtls.RltdPties.Cdtr.Pty.PstlAdr.AdrLine
-              : [txDtls.RltdPties.Cdtr.Pty.PstlAdr.AdrLine],
-          },
+    relatedParties: txDtls.RltdPties ? {
+      creditor: txDtls.RltdPties.Cdtr ? {
+        name: txDtls.RltdPties.Cdtr.Pty?.Nm || '',
+        postalAddress: {
+          country: txDtls.RltdPties.Cdtr.Pty?.PstlAdr?.Ctry,
+          addressLine: txDtls.RltdPties.Cdtr.Pty?.PstlAdr?.AdrLine
+            ? (Array.isArray(txDtls.RltdPties.Cdtr.Pty.PstlAdr.AdrLine)
+                ? txDtls.RltdPties.Cdtr.Pty.PstlAdr.AdrLine
+                : [txDtls.RltdPties.Cdtr.Pty.PstlAdr.AdrLine])
+            : [],
         },
       } : undefined,
-      cdtrAcct: txDtls.RltdPties.CdtrAcct ? {
-        id: {
-          iban: txDtls.RltdPties.CdtrAcct.Id.IBAN,
-        },
+      creditorAccount: txDtls.RltdPties.CdtrAcct ? {
+        iban: txDtls.RltdPties.CdtrAcct.Id?.IBAN || '',
       } : undefined,
-      ultmtCdtr: txDtls.RltdPties.UltmtCdtr ? { pty: txDtls.RltdPties.UltmtCdtr.Pty } : undefined,
     } : undefined,
-    rmtInf: txDtls.RmtInf ? {
-      strd: {
-        cdtrRefInf: {
-          tp: {
-            cdOrPrtry: {
-              cd: txDtls.RmtInf.Strd.CdtrRefInf.Tp.CdOrPrtry.Cd,
-            },
-          },
-          ref: txDtls.RmtInf.Strd.CdtrRefInf.Ref,
+    remittanceInformation: txDtls.RmtInf?.Strd ? {
+      structured: {
+        creditorReferenceInformation: {
+          type: txDtls.RmtInf.Strd.CdtrRefInf?.Tp?.CdOrPrtry?.Cd || '',
+          reference: txDtls.RmtInf.Strd.CdtrRefInf?.Ref || '',
         },
-        addtlRmtInf: Array.isArray(txDtls.RmtInf.Strd.AddtlRmtInf)
-          ? txDtls.RmtInf.Strd.AddtlRmtInf
-          : [txDtls.RmtInf.Strd.AddtlRmtInf],
+        additionalRemittanceInformation: txDtls.RmtInf.Strd.AddtlRmtInf
+          ? (Array.isArray(txDtls.RmtInf.Strd.AddtlRmtInf)
+              ? txDtls.RmtInf.Strd.AddtlRmtInf
+              : [txDtls.RmtInf.Strd.AddtlRmtInf])
+          : [],
       },
     } : undefined,
   };
