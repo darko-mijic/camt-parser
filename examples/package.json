@@ -1,0 +1,25 @@
+{
+  "name": "camt-parser-examples",
+  "version": "1.0.0",
+  "description": "Examples for using the camt-parser package",
+  "private": true,
+  "scripts": {
+    "demo:js": "node demo.js",
+    "demo:ts": "ts-node demo.ts",
+    "replit": "ts-node replit-usage.ts",
+    "install-deps": "npm install camt-parser && npm install -D ts-node typescript @types/node"
+  },
+  "dependencies": {
+    "camt-parser": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "author": "Darko Mijic",
+  "license": "MIT"
+} 

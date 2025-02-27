@@ -1,7 +1,7 @@
 import { parseCamt053 } from '../src/parser';
 
 describe('parseCamt053', () => {
-  it('parses group header correctly', async () => {
+  it('parses document header correctly', async () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
   <BkToCstmrStmt>
@@ -12,8 +12,8 @@ describe('parseCamt053', () => {
   </BkToCstmrStmt>
 </Document>`;
     const result = await parseCamt053(xml);
-    expect(result.groupHeader.msgId).toBe('BCS_1101537865_20250102_001_978');
-    expect(result.groupHeader.creDtTm).toBe('2025-01-03T00:18:37.874');
+    expect(result.header.messageId).toBe('BCS_1101537865_20250102_001_978');
+    expect(result.header.creationDateTime).toBe('2025-01-03T00:18:37.874');
   });
 
   it('parses statement and account details', async () => {
@@ -61,13 +61,13 @@ describe('parseCamt053', () => {
 </Document>`;
     const result = await parseCamt053(xml);
     const stmt = result.statements[0];
-    expect(stmt.id).toBe('BCS_1101537865_20250102_001_978');
-    expect(stmt.acct.id.iban).toBe('HR1725000091101537865');
-    expect(stmt.acct.ownr.nm).toBe('EBIZ D.O.O.');
-    expect(stmt.acct.ownr.pstlAdr.adrLine).toEqual(['PRISAVLJE 10', 'ZAGREB']);
+    expect(stmt.statementId).toBe('BCS_1101537865_20250102_001_978');
+    expect(stmt.account.iban).toBe('HR1725000091101537865');
+    expect(stmt.account.owner.name).toBe('EBIZ D.O.O.');
+    expect(stmt.account.owner.address).toEqual(['PRISAVLJE 10', 'ZAGREB']);
   });
 
-  it('parses balances and entries', async () => {
+  it('parses balances and transactions', async () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
   <BkToCstmrStmt>
@@ -157,8 +157,8 @@ describe('parseCamt053', () => {
 </Document>`;
     const result = await parseCamt053(xml);
     const stmt = result.statements[0];
-    expect(stmt.bal[0].amt.value).toBe('1191.59');
-    expect(stmt.ntry[0].amt.value).toBe('1158.38');
-    expect(stmt.ntry[0].ntryDtls[0].txDtls[0].refs.endToEndId).toBe('HR99');
+    expect(stmt.balances[0].amount.value).toBe('1191.59');
+    expect(stmt.transactions[0].amount.value).toBe('1158.38');
+    expect(stmt.transactions[0].details[0].references.endToEndId).toBe('HR99');
   });
 }); 

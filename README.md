@@ -1,13 +1,14 @@
 # camt-parser
 
-A TypeScript library for parsing bank statements in the SEPA CAMT (ISO 20022) format.
+A TypeScript library for parsing bank statements in the SEPA CAMT (ISO 20022) format with human-readable interfaces.
 
 ## Introduction
 
-`camt-parser` is designed to parse XML bank statements in the CAMT format, specifically version `camt.053.001.08`. It provides a structured, typed representation of statement data, including account details, balances, and transactions.
+`camt-parser` is designed to parse XML bank statements in the CAMT format, specifically version `camt.053.001.08`. It provides a structured, typed representation of statement data, including account details, balances, and transactions. Version 1.1.0 introduces human-readable interfaces that make working with CAMT data more intuitive.
 
 ## Features
 
+- Human-readable interfaces with intuitive property names
 - Full TypeScript support with comprehensive type definitions
 - Parses CAMT.053.001.08 XML format
 - Handles both single and multiple statements
@@ -42,9 +43,9 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
 async function parseStatement() {
   try {
     const document = await parseCamt053(xml);
-    console.log('Message ID:', document.groupHeader.msgId);
-    console.log('IBAN:', document.statements[0].acct.id.iban);
-    console.log('Transactions:', document.statements[0].ntry);
+    console.log('Message ID:', document.header.messageId);
+    console.log('IBAN:', document.statements[0].account.iban);
+    console.log('Transactions:', document.statements[0].transactions);
   } catch (error) {
     console.error('Error parsing CAMT XML:', error);
   }
@@ -55,35 +56,56 @@ parseStatement();
 
 ### Accessing Statement Data
 
-The parser provides strongly-typed access to all statement data:
+The parser provides strongly-typed access to all statement data with human-readable property names:
 
 ```typescript
-import { parseCamt053, Camt053Document } from 'camt-parser';
+import { parseCamt053, BankStatementDocument } from 'camt-parser';
 
 async function processStatement(xml: string) {
-  const doc: Camt053Document = await parseCamt053(xml);
+  const doc: BankStatementDocument = await parseCamt053(xml);
   
-  // Access group header information
-  console.log('Message ID:', doc.groupHeader.msgId);
-  console.log('Creation Time:', doc.groupHeader.creDtTm);
+  // Access document header information
+  console.log('Message ID:', doc.header.messageId);
+  console.log('Creation Time:', doc.header.creationDateTime);
   
   // Process each statement
   doc.statements.forEach(stmt => {
-    console.log('Statement ID:', stmt.id);
-    console.log('Account IBAN:', stmt.acct.id.iban);
-    console.log('Account Owner:', stmt.acct.ownr.nm);
+    console.log('Statement ID:', stmt.statementId);
+    console.log('Statement Date:', stmt.toDateTime);
+    console.log('Account IBAN:', stmt.account.iban);
+    console.log('Account Owner:', stmt.account.owner.name);
     
-    // Process balances
-    stmt.bal.forEach(bal => {
-      console.log('Balance:', bal.amt.value, bal.amt.currency);
-      console.log('Balance Type:', bal.tp.cdOrPrtry.cd);
-    });
+    // Find opening and closing balances
+    const openingBalance = stmt.balances.find(bal => bal.type === 'OPBD');
+    const closingBalance = stmt.balances.find(bal => bal.type === 'CLBD');
+    
+    if (openingBalance) {
+      console.log('Opening Balance:', openingBalance.amount.value, openingBalance.amount.currency);
+    }
+    
+    if (closingBalance) {
+      console.log('Closing Balance:', closingBalance.amount.value, closingBalance.amount.currency);
+    }
     
     // Process transactions
-    stmt.ntry.forEach(entry => {
-      console.log('Transaction Amount:', entry.amt.value, entry.amt.currency);
-      console.log('Credit/Debit:', entry.cdtDbtInd);
-      console.log('Status:', entry.sts.cd);
+    stmt.transactions.forEach(tx => {
+      console.log('Transaction Amount:', tx.amount.value, tx.amount.currency);
+      console.log('Credit/Debit:', tx.creditDebitIndicator);
+      console.log('Status:', tx.status);
+      console.log('Booking Date:', tx.bookingDate);
+      
+      // Process transaction details
+      tx.details.forEach(detail => {
+        console.log('End-to-End ID:', detail.references.endToEndId);
+        
+        if (detail.relatedParties?.creditor) {
+          console.log('Creditor:', detail.relatedParties.creditor.name);
+        }
+        
+        if (detail.relatedParties?.creditorAccount) {
+          console.log('Creditor IBAN:', detail.relatedParties.creditorAccount.iban);
+        }
+      });
     });
   });
 }
@@ -93,50 +115,82 @@ async function processStatement(xml: string) {
 
 ### Main Function
 
-#### `parseCamt053(xml: string): Promise<Camt053Document>`
+#### `parseCamt053(xml: string): Promise<BankStatementDocument>`
 
 Parses a CAMT.053 XML string and returns a Promise resolving to a structured document object.
 
 ### Main Interfaces
 
-#### `Camt053Document`
+#### `BankStatementDocument`
 ```typescript
-interface Camt053Document {
-  groupHeader: GroupHeader;
-  statements: Statement[];
+interface BankStatementDocument {
+  header: DocumentHeader;
+  statements: BankStatement[];
 }
 ```
 
-#### `GroupHeader`
+#### `DocumentHeader`
 ```typescript
-interface GroupHeader {
-  msgId: string;
-  creDtTm: string;
+interface DocumentHeader {
+  messageId: string;          // Unique identifier for the message
+  creationDateTime: string;   // Date and time the message was created
 }
 ```
 
-#### `Statement`
+#### `BankStatement`
 ```typescript
-interface Statement {
-  id: string;
-  lglSeqNb: string;
-  creDtTm: string;
-  frToDt: {
-    frDtTm: string;
-    toDtTm: string;
-  };
-  rptgSrc: {
-    prtry: string;
-  };
-  acct: Account;
-  bal: Balance[];
-  txsSummry?: TransactionSummary;
-  ntry: Entry[];
-  addtlStmtInf?: string;
+interface BankStatement {
+  statementId: string;        // Bank statement number or ID
+  sequenceNumber: string;     // Sequence number of the statement
+  creationDateTime: string;   // Date and time the statement was created
+  fromDateTime: string;       // Start date of the statement period
+  toDateTime: string;         // End date of the statement period (bank statement date)
+  reportingSource: string;    // Source of the reporting
+  account: BankAccount;       // Bank account details
+  balances: Balance[];        // List of balances (opening, closing, etc.)
+  transactionSummary?: TransactionSummary;  // Summary of transactions (optional)
+  transactions: Transaction[];              // List of transactions
+  additionalInfo?: string;    // Additional statement information (optional)
 }
 ```
 
 See source code for complete interface definitions.
+
+## Key Information Access
+
+The human-readable interfaces make it easy to access key information:
+
+```typescript
+// Bank statement date
+const statementDate = statement.toDateTime;
+
+// Bank statement number
+const statementNumber = statement.statementId;
+
+// Bank account details
+const iban = statement.account.iban;
+const currency = statement.account.currency;
+const accountName = statement.account.name;
+
+// Initial (opening) balance
+const openingBalance = statement.balances.find(b => b.type === 'OPBD')?.amount.value;
+const openingBalanceCurrency = statement.balances.find(b => b.type === 'OPBD')?.amount.currency;
+
+// New (closing) balance
+const closingBalance = statement.balances.find(b => b.type === 'CLBD')?.amount.value;
+const closingBalanceCurrency = statement.balances.find(b => b.type === 'CLBD')?.amount.currency;
+
+// Transactions
+const transactions = statement.transactions.map(tx => ({
+  amount: tx.amount.value,
+  currency: tx.amount.currency,
+  type: tx.creditDebitIndicator,
+  bookingDate: tx.bookingDate,
+  valueDate: tx.valueDate,
+  reference: tx.reference,
+  creditorName: tx.details[0]?.relatedParties?.creditor?.name,
+}));
+```
 
 ## Error Handling
 
