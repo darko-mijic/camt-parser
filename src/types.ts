@@ -91,8 +91,10 @@ export interface TransactionDetail {
     transactionAmount: Amount;         // Transaction amount details
   };
   relatedParties?: {
-    creditor?: Party;                  // Creditor details (optional)
-    creditorAccount?: AccountIdentification;  // Creditor account (optional)
+    debtor?: Party;                   // Debtor details (optional) - for credit transactions
+    debtorAccount?: AccountIdentification;  // Debtor account (optional) - for credit transactions
+    creditor?: Party;                  // Creditor details (optional) - for debit transactions
+    creditorAccount?: AccountIdentification;  // Creditor account (optional) - for debit transactions
   };
   remittanceInformation?: {
     structured: {

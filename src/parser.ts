@@ -198,6 +198,20 @@ function mapTransactionDetail(txDtls: any): TransactionDetail {
         : { currency: '', value: '' },
     },
     relatedParties: txDtls.RltdPties ? {
+      debtor: txDtls.RltdPties.Dbtr ? {
+        name: txDtls.RltdPties.Dbtr.Pty?.Nm || '',
+        postalAddress: {
+          country: txDtls.RltdPties.Dbtr.Pty?.PstlAdr?.Ctry,
+          addressLine: txDtls.RltdPties.Dbtr.Pty?.PstlAdr?.AdrLine
+            ? (Array.isArray(txDtls.RltdPties.Dbtr.Pty.PstlAdr.AdrLine)
+                ? txDtls.RltdPties.Dbtr.Pty.PstlAdr.AdrLine
+                : [txDtls.RltdPties.Dbtr.Pty.PstlAdr.AdrLine])
+            : [],
+        },
+      } : undefined,
+      debtorAccount: txDtls.RltdPties.DbtrAcct ? {
+        iban: txDtls.RltdPties.DbtrAcct.Id?.IBAN || '',
+      } : undefined,
       creditor: txDtls.RltdPties.Cdtr ? {
         name: txDtls.RltdPties.Cdtr.Pty?.Nm || '',
         postalAddress: {

@@ -1,6 +1,6 @@
 {
   "name": "camt-parser",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A TypeScript library for parsing bank statements in the SEPA CAMT (ISO 20022) format with human-readable interfaces",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,7 +31,6 @@
   "author": "Darko Mijic",
   "license": "MIT",
   "dependencies": {
-    "camt-parser": "^1.1.0",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
